@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#ff7b9c">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="옹이 성장">
+    <title>옹이의 튼튼 성장 그래프</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
+    <style>
+        :root {
+            --primary-color: #ff7b9c;
+            --bg-color: #fff9fb;
+            --card-bg: #ffffff;
+            --text-color: #4a4a4a;
+        }
+        body {
+            font-family: 'Pretendard', 'Malgun Gothic', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .container { width: 100%; max-width: 600px; }
+        header { text-align: center; margin-bottom: 12px; }
+        header h1 { font-size: 1.5rem; color: var(--primary-color); margin: 0 0 6px 0; }
+        header p { font-size: 0.85rem; color: #888; margin: 0; }
+
+        .sync-bar {
+            font-size: 0.78rem; text-align: center; color: #888;
+            margin-bottom: 12px; min-height: 1em;
+        }
+        .sync-bar.ok { color: #2e9e5b; }
+        .sync-bar.warn { color: #d9822b; }
+
+        .goal-card {
+            background: linear-gradient(135deg, #fff0f5, #ffe6ee);
+            border: 2px solid #ffccd5;
+            border-radius: 16px;
+            padding: 16px;
+            margin-bottom: 16px;
+            text-align: center;
+        }
+        .goal-title { font-size: 0.95rem; font-weight: bold; color: #d63384; margin-bottom: 8px; }
+        .progress-container {
+            background-color: #ffffff; border-radius: 20px; height: 18px; width: 100%;
+            overflow: hidden; box-shadow: inset 0 1px 3px rgba(0,0,0,0.1); margin: 8px 0;
+        }
+        .progress-bar {
+            background: linear-gradient(90deg, #ff8fa3, #ff4d79);
+            height: 100%; width: 0%; border-radius: 20px; transition: width 0.5s ease-in-out;
+        }
+        .goal-edit {
+            margin-top: 10px; background: #fff; border: 1px solid #ffccd5; color: #d63384;
+            border-radius: 20px; padding: 5px 14px; font-size: 0.8rem; cursor: pointer;
+        }
+        .goal-sub { font-size: 0.78rem; color: #a0567a; margin-top: 2px; }
+        .goal-status { display: flex; justify-content: space-between; font-size: 0.8rem; color: #666; margin-top: 4px; }
+
+        .card {
+            background: var(--card-bg); border-radius: 16px; padding: 16px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 20px;
+        }
+        .chart-container { position: relative; height: 350px; width: 100%; }
+        .chart-controls { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 10px; }
+        .btn-reset-zoom {
+            background: #eee; border: none; padding: 6px 12px; border-radius: 20px;
+            font-size: 0.8rem; cursor: pointer; white-space: nowrap;
+        }
+
+        .fab {
+            position: fixed; bottom: 24px; right: 24px; width: 56px; height: 56px;
+            background-color: var(--primary-color); color: white; border-radius: 50%;
+            display: flex; justify-content: center; align-items: center; font-size: 28px;
+            box-shadow: 0 4px 10px rgba(255, 123, 156, 0.4); cursor: pointer; border: none;
+            transition: transform 0.2s;
+        }
+        .fab:active { transform: scale(0.95); }
+        .fab[hidden] { display: none; }
+
+        .modal-overlay {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+            display: none; justify-content: center; align-items: center; z-index: 100;
+        }
+        .modal { background: white; padding: 24px; border-radius: 20px; width: 85%; max-width: 320px; }
+        .modal h2 { margin-top: 0; font-size: 1.2rem; color: var(--primary-color); }
+        .form-group { margin-bottom: 16px; }
+        .form-group label { display: block; font-size: 0.85rem; margin-bottom: 6px; color: #666; }
+        .form-group input { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 10px; box-sizing: border-box; font-size: 1rem; }
+        .form-error { color: #e03e5c; font-size: 0.8rem; min-height: 1em; }
+        .modal-buttons { display: flex; gap: 8px; margin-top: 12px; }
+        .btn { flex: 1; padding: 12px; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; }
+        .btn:disabled { opacity: 0.6; cursor: default; }
+        .btn-submit { background: var(--primary-color); color: white; }
+        .btn-cancel { background: #f0f0f0; color: #666; }
+
+        .record-list { max-height: 220px; overflow-y: auto; }
+        .record-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #f0f0f0; font-size: 0.9rem; }
+        .delete-btn { background: none; border: none; color: #ff4d4d; cursor: pointer; font-size: 0.8rem; padding: 4px 6px; }
+        .delete-btn.confirm { background: #ff4d4d; color: #fff; border-radius: 8px; }
+        .empty { color: #aaa; font-size: 0.85rem; text-align: center; padding: 12px 0; }
+
+        .import-box {
+            display: none; margin-top: 12px; padding: 10px; background: #fff6e8;
+            border-radius: 10px; font-size: 0.8rem; color: #8a5a00;
+        }
+        .import-box button {
+            margin-top: 6px; background: #ffb84d; color: #fff; border: none;
+            border-radius: 8px; padding: 6px 12px; font-weight: bold; cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <h1>옹이의 튼튼 성장 그래프 ⭐</h1>
+        <p>기본 7일 보기 / 손가락을 모으면 2027년까지 전체 곡선 확인!</p>
+    </header>
+
+    <div class="sync-bar" id="syncBar">기록을 불러오는 중…</div>
+
+    <div class="goal-card">
+        <div class="goal-title" id="goalTitle">🎯 목표</div>
+        <div class="goal-sub" id="goalSub"></div>
+        <div class="progress-container">
+            <div class="progress-bar" id="progressBar"></div>
+        </div>
+        <div class="goal-status">
+            <span id="startText">시작: - kg</span>
+            <span id="currentStatusText">현재: - kg</span>
+            <span id="targetText">목표: - kg</span>
+        </div>
+        <button class="goal-edit" id="goalEditBtn">목표 바꾸기</button>
+    </div>
+
+    <div class="card">
+        <div class="chart-container">
+            <canvas id="growthChart"></canvas>
+        </div>
+        <div class="chart-controls">
+            <span style="font-size:0.75rem; color:#888;">진한 분홍선: 7일 평균 / 초록선: 표준 평균</span>
+            <button class="btn-reset-zoom" id="resetBtn">일주일 보기</button>
+        </div>
+    </div>
+
+    <div class="card">
+        <h3 style="margin-top:0; font-size:1rem;">최근 기록 내역</h3>
+        <div class="record-list" id="recordList"></div>
+        <div class="import-box" id="importBox">
+            이 기기에 예전에 저장된 기록이 <b id="importCount">0</b>개 있습니다. 함께 보는 기록으로 옮길까요?
+            <br><button id="importBtn">가족 기록으로 옮기기</button>
+        </div>
+    </div>
+</div>
+
+<button class="fab" id="fab" aria-label="기록 추가">+</button>
+
+<div class="modal-overlay" id="modalOverlay">
+    <div class="modal">
+        <h2>오늘의 성장 기록 🌱</h2>
+        <div class="form-group">
+            <label for="recordDate">날짜 선택</label>
+            <input type="date" id="recordDate">
+        </div>
+        <div class="form-group">
+            <label for="recordWeight">몸무게 (kg)</label>
+            <input type="number" step="0.01" min="10" max="150" inputmode="decimal" id="recordWeight" placeholder="예: 45.7">
+        </div>
+        <div class="form-error" id="formError"></div>
+        <div class="modal-buttons">
+            <button class="btn btn-cancel" id="cancelBtn">취소</button>
+            <button class="btn btn-submit" id="saveBtn">기록 저장</button>
+        </div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="goalOverlay">
+    <div class="modal">
+        <h2>목표 바꾸기 🎯</h2>
+        <div class="form-group">
+            <label for="goalStart">시작 몸무게 (kg)</label>
+            <input type="number" step="0.01" inputmode="decimal" id="goalStart">
+        </div>
+        <div class="form-group">
+            <label for="goalTarget">목표 몸무게 (kg)</label>
+            <input type="number" step="0.01" inputmode="decimal" id="goalTarget">
+        </div>
+        <div class="form-group">
+            <label for="goalDate">목표 날짜</label>
+            <input type="date" id="goalDate">
+        </div>
+        <div class="form-error" id="goalError"></div>
+        <div class="modal-buttons">
+            <button class="btn btn-cancel" id="goalCancelBtn">취소</button>
+            <button class="btn btn-submit" id="goalSaveBtn">목표 저장</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    const DEFAULT_GOAL = { startWeight: 46.0, targetWeight: 40.5, targetDate: '2026-12-01' };
+    let goal = { ...DEFAULT_GOAL };
+    const LEGACY_KEY = 'ong_growth_records';
+
+    const monthlyGuideData = [
+        { date: '2026-01-01', low: 31.0, avg: 36.8, high: 44.5 },
+        { date: '2026-02-01', low: 31.3, avg: 37.2, high: 45.0 },
+        { date: '2026-03-01', low: 31.6, avg: 37.6, high: 45.5 },
+        { date: '2026-04-01', low: 31.9, avg: 38.0, high: 46.0 },
+        { date: '2026-05-01', low: 32.2, avg: 38.5, high: 46.6 },
+        { date: '2026-06-01', low: 32.6, avg: 39.0, high: 47.2 },
+        { date: '2026-07-01', low: 33.0, avg: 39.5, high: 47.8 },
+        { date: '2026-08-01', low: 33.4, avg: 40.0, high: 48.4 },
+        { date: '2026-09-01', low: 33.8, avg: 40.5, high: 49.0 },
+        { date: '2026-10-01', low: 34.2, avg: 41.0, high: 49.6 },
+        { date: '2026-11-01', low: 34.6, avg: 41.5, high: 50.2 },
+        { date: '2026-12-01', low: 35.0, avg: 42.0, high: 50.8 },
+        { date: '2027-01-01', low: 35.4, avg: 42.4, high: 51.4 },
+        { date: '2027-02-01', low: 35.8, avg: 42.8, high: 52.0 },
+        { date: '2027-03-01', low: 36.2, avg: 43.2, high: 52.6 },
+        { date: '2027-04-01', low: 36.6, avg: 43.6, high: 53.2 },
+        { date: '2027-05-01', low: 37.0, avg: 44.1, high: 53.8 },
+        { date: '2027-06-01', low: 37.4, avg: 44.6, high: 54.4 },
+        { date: '2027-07-01', low: 37.8, avg: 45.1, high: 55.0 },
+        { date: '2027-08-01', low: 38.2, avg: 45.6, high: 55.6 },
+        { date: '2027-09-01', low: 38.6, avg: 46.1, high: 56.2 },
+        { date: '2027-10-01', low: 39.0, avg: 46.6, high: 56.8 },
+        { date: '2027-11-01', low: 39.4, avg: 47.1, high: 57.4 },
+        { date: '2027-12-01', low: 39.8, avg: 47.6, high: 58.0 }
+    ];
+
+    // 상태
+    let userRecords = [];      // [{date, weight}] 날짜순 정렬 유지
+    let db = null;
+    let canWrite = true;
+    let chart = null;
+    let pendingDelete = null;
+    let pendingDeleteTimer = null;
+
+    // --- 날짜 유틸: 한국 시간(로컬) 기준. toISOString()은 UTC라 오전 9시 전엔 하루 밀림 ---
+    function localYMD(d) {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+    }
+    function parseYMD(s) {
+        const [y, m, d] = s.split('-').map(Number);
+        return new Date(y, m - 1, d);
+    }
+    function addDays(s, n) {
+        const d = parseYMD(s);
+        d.setDate(d.getDate() + n);
+        return localYMD(d);
+    }
+    function fmtKg(w) { return (Math.round(w * 100) / 100).toString(); }
+    function isValidYMD(s) { return /^\d{4}-\d{2}-\d{2}$/.test(s); }
+
+    function setSync(text, cls) {
+        const el = document.getElementById('syncBar');
+        el.textContent = text;
+        el.className = 'sync-bar' + (cls ? ' ' + cls : '');
+    }
+
+    function getDefaultXBounds() {
+        const last = userRecords.length ? userRecords[userRecords.length - 1].date : localYMD(new Date());
+        return { min: addDays(last, -6), max: addDays(last, 1) };
+    }
+
+    function getUserChartData() {
+        return userRecords.map(r => ({ x: r.date, y: r.weight }));
+    }
+    // 각 기록 날짜 기준, 최근 7일(그날 포함) 안의 기록 평균
+    function getAvgChartData() {
+        const out = [];
+        let lo = 0, sum = 0;
+        for (let hi = 0; hi < userRecords.length; hi++) {
+            sum += userRecords[hi].weight;
+            const from = addDays(userRecords[hi].date, -6);
+            while (userRecords[lo].date < from) { sum -= userRecords[lo].weight; lo++; }
+            out.push({ x: userRecords[hi].date, y: Math.round(sum / (hi - lo + 1) * 100) / 100 });
+        }
+        return out;
+    }
+    function getGoalLineData() {
+        return [{ x: '2026-07-01', y: goal.targetWeight }, { x: goal.targetDate, y: goal.targetWeight }];
+    }
+    function fmtMD(s) { const d = parseYMD(s); return `${d.getMonth() + 1}월 ${d.getDate()}일`; }
+
+    function initChart() {
+        if (typeof Chart === 'undefined') {
+            setSync('그래프 도구를 불러오지 못했습니다. 새로고침해 주세요.', 'warn');
+            return;
+        }
+        const ctx = document.getElementById('growthChart').getContext('2d');
+        const bounds = getDefaultXBounds();
+        chart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                datasets: [
+                    {
+                        label: '옹이 실측 체중 (kg)',
+                        data: getUserChartData(),
+                        borderColor: 'rgba(255, 77, 121, 0.45)',
+                        backgroundColor: '#ff8fab',
+                        borderWidth: 1.5,
+                        pointRadius: 4,
+                        pointHoverRadius: 7,
+                        spanGaps: true,
+                        order: 1
+                    },
+                    {
+                        label: '7일 평균 (kg)',
+                        data: getAvgChartData(),
+                        borderColor: '#c2185b',
+                        borderWidth: 3,
+                        pointRadius: 0,
+                        pointHitRadius: 6,
+                        tension: 0.3,
+                        fill: false,
+                        order: 0
+                    },
+                    {
+                        label: '🏁 목표선',
+                        data: getGoalLineData(),
+                        borderColor: '#9b59b6', borderDash: [6, 4], borderWidth: 2, pointRadius: 0, fill: false, order: 2
+                    },
+                    {
+                        label: '평균 (50 백분위)',
+                        data: monthlyGuideData.map(d => ({ x: d.date, y: d.avg })),
+                        borderColor: '#2ecc71', borderDash: [5, 5], borderWidth: 2, pointRadius: 0, fill: false, order: 2
+                    },
+                    {
+                        label: '보통 상한선 (85 백분위)',
+                        data: monthlyGuideData.map(d => ({ x: d.date, y: d.high })),
+                        borderColor: '#ff9f43', borderDash: [3, 3], borderWidth: 1.5, pointRadius: 0, fill: false, order: 3
+                    },
+                    {
+                        label: '보통 하한선 (15 백분위)',
+                        data: monthlyGuideData.map(d => ({ x: d.date, y: d.low })),
+                        borderColor: '#54a0ff', borderDash: [3, 3], borderWidth: 1.5, pointRadius: 0, fill: false, order: 4
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: {
+                        type: 'time',
+                        time: { unit: 'day', tooltipFormat: 'yyyy-MM-dd', displayFormats: { day: 'M/d', week: 'M/d', month: 'yy/M' } },
+                        min: bounds.min,
+                        max: bounds.max,
+                        title: { display: true, text: '날짜' }
+                    },
+                    y: { title: { display: true, text: '체중 (kg)' }, min: 30, max: 60 }
+                },
+                plugins: {
+                    zoom: {
+                        limits: { x: { min: new Date(2026, 0, 1).getTime(), max: new Date(2027, 11, 31).getTime() } },
+                        pan: { enabled: true, mode: 'x' },
+                        zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x' }
+                    }
+                }
+            }
+        });
+    }
+
+    function applyDefaultView() {
+        if (!chart) return;
+        const bounds = getDefaultXBounds();
+        // resetZoom()은 처음 확대 시점의 범위로 되돌리므로, 최신 기록 기준 범위를 직접 지정
+        chart.options.scales.x.min = bounds.min;
+        chart.options.scales.x.max = bounds.max;
+        chart.update('none');
+    }
+
+    function renderGoal() {
+        document.getElementById('goalTitle').textContent = `🎯 ${fmtMD(goal.targetDate)} 목표: ${fmtKg(goal.targetWeight)} kg`;
+        document.getElementById('startText').textContent = `시작: ${fmtKg(goal.startWeight)} kg`;
+        document.getElementById('targetText').textContent = `목표: ${fmtKg(goal.targetWeight)} kg`;
+        const today = localYMD(new Date());
+        const days = Math.round((parseYMD(goal.targetDate) - parseYMD(today)) / 86400000);
+        document.getElementById('goalSub').textContent = days > 0 ? `목표일까지 ${days}일` : (days === 0 ? '오늘이 목표일!' : '목표일이 지났어요 — 새 목표를 정해 보세요');
+        if (chart) { chart.data.datasets[2].data = getGoalLineData(); chart.update('none'); }
+        updateProgressBar();
+    }
+
+    function updateProgressBar() {
+        const statusEl = document.getElementById('currentStatusText');
+        const bar = document.getElementById('progressBar');
+        if (userRecords.length === 0) {
+            bar.style.width = '0%';
+            statusEl.innerText = '현재: - kg';
+            return;
+        }
+        const latestWeight = userRecords[userRecords.length - 1].weight;
+        const span = goal.startWeight - goal.targetWeight;
+        let pct = span !== 0 ? ((goal.startWeight - latestWeight) / span) * 100 : 0;
+        pct = Math.max(0, Math.min(100, pct));
+        bar.style.width = pct.toFixed(1) + '%';
+        statusEl.innerText = `현재: ${fmtKg(latestWeight)} kg`;
+    }
+
+    function renderRecordList() {
+        const listEl = document.getElementById('recordList');
+        listEl.innerHTML = '';
+        if (userRecords.length === 0) {
+            listEl.innerHTML = '<div class="empty">아직 기록이 없습니다. + 버튼으로 추가해 주세요.</div>';
+            return;
+        }
+        [...userRecords].reverse().forEach(item => {
+            const row = document.createElement('div');
+            row.className = 'record-item';
+            const left = document.createElement('div');
+            const strong = document.createElement('strong');
+            strong.textContent = item.date;
+            left.appendChild(strong);
+            const right = document.createElement('div');
+            const w = document.createElement('span');
+            w.textContent = `${fmtKg(item.weight)} kg`;
+            right.appendChild(w);
+            if (canWrite) {
+                const del = document.createElement('button');
+                del.className = 'delete-btn' + (pendingDelete === item.date ? ' confirm' : '');
+                del.textContent = pendingDelete === item.date ? '정말 삭제?' : '삭제';
+                del.addEventListener('click', () => onDeleteClick(item.date));
+                right.appendChild(del);
+            }
+            row.appendChild(left);
+            row.appendChild(right);
+            listEl.appendChild(row);
+        });
+    }
+
+    function refreshAll(keepView) {
+        if (chart) {
+            chart.data.datasets[0].data = getUserChartData();
+            chart.data.datasets[1].data = getAvgChartData();
+            if (keepView) chart.update('none');
+            else applyDefaultView();
+        }
+        updateProgressBar();
+        renderRecordList();
+    }
+
+    // --- 입력 ---
+    function openModal() {
+        document.getElementById('recordDate').value = localYMD(new Date());
+        document.getElementById('recordWeight').value = '';
+        document.getElementById('formError').textContent = '';
+        document.getElementById('modalOverlay').style.display = 'flex';
+    }
+    function closeModal() { document.getElementById('modalOverlay').style.display = 'none'; }
+
+    async function saveRecord() {
+        const date = document.getElementById('recordDate').value;
+        const weight = parseFloat(document.getElementById('recordWeight').value);
+        const errEl = document.getElementById('formError');
+        if (!isValidYMD(date) || isNaN(weight) || weight < 10 || weight > 150) {
+            errEl.textContent = '날짜와 몸무게를 올바르게 입력해 주세요.';
+            return;
+        }
+        const rounded = Math.round(weight * 100) / 100;
+        const saveBtn = document.getElementById('saveBtn');
+        saveBtn.disabled = true;
+        try {
+            if (db) {
+                await db.set(date, { date, weight: rounded, updatedAt: new Date().toISOString() });
+            } else {
+                upsertLocal(date, rounded);
+                refreshAll();
+            }
+            closeModal();
+        } catch (e) {
+            if (e && e.code === 'permission-denied') {
+                errEl.textContent = '서버가 저장을 거절했습니다. 보안 규칙을 확인해 주세요.';
+            } else {
+                errEl.textContent = '저장하지 못했습니다. 잠시 후 다시 시도해 주세요.';
+            }
+        } finally {
+            saveBtn.disabled = false;
+        }
+    }
+
+    function openGoal() {
+        document.getElementById('goalStart').value = goal.startWeight;
+        document.getElementById('goalTarget').value = goal.targetWeight;
+        document.getElementById('goalDate').value = goal.targetDate;
+        document.getElementById('goalError').textContent = '';
+        document.getElementById('goalOverlay').style.display = 'flex';
+    }
+    function closeGoal() { document.getElementById('goalOverlay').style.display = 'none'; }
+    async function saveGoal() {
+        const sw = parseFloat(document.getElementById('goalStart').value);
+        const tw = parseFloat(document.getElementById('goalTarget').value);
+        const td = document.getElementById('goalDate').value;
+        const err = document.getElementById('goalError');
+        if (isNaN(sw) || isNaN(tw) || sw < 10 || sw > 150 || tw < 10 || tw > 150 || !isValidYMD(td)) {
+            err.textContent = '몸무게와 날짜를 올바르게 입력해 주세요.';
+            return;
+        }
+        const next = { startWeight: Math.round(sw * 100) / 100, targetWeight: Math.round(tw * 100) / 100, targetDate: td };
+        const btn = document.getElementById('goalSaveBtn');
+        btn.disabled = true;
+        try {
+            if (db) await db.setGoal(next);
+            else { goal = next; try { localStorage.setItem('ong_goal', JSON.stringify(goal)); } catch (e) {} renderGoal(); }
+            closeGoal();
+        } catch (e) {
+            err.textContent = '저장하지 못했습니다. 보안 규칙을 확인해 주세요.';
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+    function upsertLocal(date, weight) {
+        const i = userRecords.findIndex(r => r.date === date);
+        if (i >= 0) userRecords[i].weight = weight;
+        else userRecords.push({ date, weight });
+        userRecords.sort((a, b) => a.date.localeCompare(b.date));
+        saveLocal();
+    }
+    function saveLocal() {
+        try { localStorage.setItem(LEGACY_KEY, JSON.stringify(userRecords)); } catch (e) {}
+    }
+
+    async function onDeleteClick(date) {
+        if (pendingDelete !== date) {
+            pendingDelete = date;
+            clearTimeout(pendingDeleteTimer);
+            pendingDeleteTimer = setTimeout(() => { pendingDelete = null; renderRecordList(); }, 3000);
+            renderRecordList();
+            return;
+        }
+        pendingDelete = null;
+        clearTimeout(pendingDeleteTimer);
+        try {
+            if (db) {
+                await db.del(date);
+            } else {
+                userRecords = userRecords.filter(r => r.date !== date);
+                saveLocal();
+                refreshAll();
+            }
+        } catch (e) {
+            setSync('삭제하지 못했습니다. 잠시 후 다시 시도해 주세요.', 'warn');
+            renderRecordList();
+        }
+    }
+
+    function applyWritePermission() {
+        document.getElementById('fab').hidden = !canWrite;
+        renderRecordList();
+        checkLegacy();
+    }
+
+    // --- 예전 기기 저장분 옮기기 ---
+    function readLegacy() {
+        try {
+            const raw = localStorage.getItem(LEGACY_KEY);
+            if (!raw) return [];
+            const arr = JSON.parse(raw);
+            if (!Array.isArray(arr)) return [];
+            return arr.filter(r => r && isValidYMD(r.date) && typeof r.weight === 'number');
+        } catch (e) { return []; }
+    }
+    function checkLegacy() {
+        const box = document.getElementById('importBox');
+        if (!db || !canWrite) { box.style.display = 'none'; return; }
+        const legacy = readLegacy();
+        const known = new Map(userRecords.map(r => [r.date, r.weight]));
+        const missing = legacy.filter(r => known.get(r.date) !== r.weight);
+        if (missing.length === 0) { box.style.display = 'none'; return; }
+        document.getElementById('importCount').textContent = missing.length;
+        box.style.display = 'block';
+        box.dataset.pending = JSON.stringify(missing);
+    }
+    async function importLegacy() {
+        const box = document.getElementById('importBox');
+        const btn = document.getElementById('importBtn');
+        const items = JSON.parse(box.dataset.pending || '[]');
+        btn.disabled = true;
+        try {
+            for (const r of items) {
+                await db.set(r.date, { date: r.date, weight: Math.round(r.weight * 100) / 100, updatedAt: new Date().toISOString() });
+            }
+            try { localStorage.removeItem(LEGACY_KEY); } catch (e) {}
+            box.style.display = 'none';
+        } catch (e) {
+            setSync('옮기는 중 문제가 생겼습니다. 다시 눌러 주세요.', 'warn');
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+    const SEED = [["2026-07-17", 46], ["2026-07-19", 46.2], ["2026-07-20", 46.2], ["2026-07-21", 45.8], ["2026-07-22", 45.7], ["2026-07-23", 45.3], ["2026-07-24", 45.7], ["2026-07-27", 45.5], ["2026-07-28", 46.5], ["2026-07-29", 46.4], ["2026-07-31", 46.7], ["2026-08-03", 46.7], ["2026-08-04", 47.3], ["2026-08-05", 47.3], ["2026-08-06", 47.5], ["2026-08-07", 47.3], ["2026-08-08", 45.7], ["2026-08-09", 46], ["2026-08-10", 46.1], ["2026-08-11", 46], ["2026-08-13", 45.9], ["2026-08-14", 45.9], ["2026-08-16", 46.3], ["2026-08-17", 45.8], ["2026-08-18", 46.1], ["2026-08-20", 45.9], ["2026-08-22", 45.9], ["2026-08-23", 45.5], ["2026-08-24", 45.7], ["2026-08-25", 45.1], ["2026-08-26", 45.3], ["2026-08-27", 45.1], ["2026-08-29", 45.1], ["2026-08-30", 45.1], ["2026-08-31", 45.1], ["2026-09-03", 45.1], ["2026-09-05", 44.9], ["2026-09-07", 45.1], ["2026-09-08", 44.85], ["2026-09-09", 44.95], ["2026-09-12", 44.7], ["2026-09-13", 45.1], ["2026-09-14", 44.9], ["2026-09-15", 44.8], ["2026-09-16", 45], ["2026-09-17", 44.7], ["2026-09-18", 44.45], ["2026-09-20", 44.5], ["2026-09-21", 44.55], ["2026-09-22", 44.55], ["2026-09-25", 44.95], ["2026-09-30", 45.5], ["2026-10-02", 44.5], ["2026-10-04", 44.7], ["2026-10-09", 44.7], ["2026-10-10", 44.1], ["2026-10-14", 44.7], ["2026-10-19", 44.5], ["2026-10-20", 44.4], ["2026-10-21", 44.5], ["2026-10-22", 44.5], ["2026-10-24", 44.5], ["2026-10-26", 44.5], ["2026-10-27", 44.5], ["2026-11-08", 44.5], ["2026-11-11", 44.45], ["2026-11-15", 44.6]];
+    let seeding = false;
+
+    // --- 공유 저장소(Firebase) 연결 ---
+    function startShared() {
+        let loadTimer = setTimeout(() => setSync('기록 서버에 연결하지 못했습니다. 인터넷 연결을 확인해 주세요.', 'warn'), 10000);
+        db = window.__fb;
+        applyWritePermission();
+        db.watchGoal(g => {
+            if (g && typeof g.startWeight === 'number' && typeof g.targetWeight === 'number' && isValidYMD(g.targetDate)) {
+                goal = { startWeight: g.startWeight, targetWeight: g.targetWeight, targetDate: g.targetDate };
+            } else {
+                goal = { ...DEFAULT_GOAL };
+            }
+            renderGoal();
+        }, () => {});
+        db.watch((list, fromCache) => {
+            const next = list.filter(v => v && isValidYMD(v.date) && typeof v.weight === 'number')
+                             .map(v => ({ date: v.date, weight: v.weight }))
+                             .sort((a, b) => a.date.localeCompare(b.date));
+            if (next.length === 0 && !fromCache && !seeding) {
+                // 처음 한 번: 지금까지의 기록를 서버에 넣기
+                seeding = true;
+                (async () => {
+                    try { for (const [d, w] of SEED) await db.set(d, { date: d, weight: w, updatedAt: new Date().toISOString() }); }
+                    catch (e) { setSync('처음 기록을 넣지 못했습니다. 보안 규칙을 확인해 주세요.', 'warn'); }
+                })();
+            }
+            const lastBefore = userRecords.length ? userRecords[userRecords.length - 1].date : null;
+            const lastAfter = next.length ? next[next.length - 1].date : null;
+            userRecords = next;
+            refreshAll(lastBefore === lastAfter && lastBefore !== null);
+            checkLegacy();
+            if (!fromCache) {
+                clearTimeout(loadTimer);
+                setSync('👨‍👩‍👧 가족이 함께 보는 기록입니다 (실시간 반영)', 'ok');
+            }
+        }, err => {
+            clearTimeout(loadTimer);
+            setSync('기록을 불러오지 못했습니다. 보안 규칙을 확인해 주세요.', 'warn');
+        });
+    }
+    function connectShared() {
+        if (window.__fb) startShared();
+        else if (window.__fbFailed) offline();
+        else {
+            window.addEventListener('fb-ready', startShared, { once: true });
+            window.addEventListener('fb-failed', offline, { once: true });
+        }
+    }
+    function offline() {
+        db = null;
+        userRecords = readLegacy().sort((a, b) => a.date.localeCompare(b.date));
+        try { const g = JSON.parse(localStorage.getItem('ong_goal')); if (g && isValidYMD(g.targetDate)) goal = g; } catch (e) {}
+        renderGoal();
+        refreshAll();
+        setSync('기록 서버 설정이 아직 없어 이 기기 기록만 보입니다.', 'warn');
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        document.getElementById('fab').addEventListener('click', openModal);
+        document.getElementById('cancelBtn').addEventListener('click', closeModal);
+        document.getElementById('saveBtn').addEventListener('click', saveRecord);
+        document.getElementById('resetBtn').addEventListener('click', applyDefaultView);
+        document.getElementById('importBtn').addEventListener('click', importLegacy);
+        document.getElementById('goalEditBtn').addEventListener('click', openGoal);
+        document.getElementById('goalCancelBtn').addEventListener('click', closeGoal);
+        document.getElementById('goalSaveBtn').addEventListener('click', saveGoal);
+        document.getElementById('goalOverlay').addEventListener('click', e => { if (e.target.id === 'goalOverlay') closeGoal(); });
+        document.getElementById('modalOverlay').addEventListener('click', e => { if (e.target.id === 'modalOverlay') closeModal(); });
+        initChart();
+        renderGoal();
+        refreshAll();
+        connectShared();
+    });
+</script>
+
+<script type="module">
+// ▼▼ 새 Firebase 프로젝트 설정값 (게임과 별도 프로젝트) ▼▼
+const FIREBASE_CONFIG = {
+    apiKey: "AIzaSyAV92r9HzdPNNdWZ6meWX6sIBxptx9namc",
+    authDomain: "ong-growth.firebaseapp.com",
+    projectId: "ong-growth",
+    storageBucket: "ong-growth.firebasestorage.app",
+    messagingSenderId: "863424189938",
+    appId: "1:863424189938:web:b6b47b8609dbf530e9076b"
+};
+// ▲▲ 여기까지 ▲▲
+try {
+    if (!FIREBASE_CONFIG) throw new Error('no config');
+    const { initializeApp } = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js');
+    const { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot } = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js');
+    const fs = getFirestore(initializeApp(FIREBASE_CONFIG));
+    window.__fb = {
+        watch(cb, err) { return onSnapshot(collection(fs, 'records'), { includeMetadataChanges: true }, s => cb(s.docs.map(d => d.data()), s.metadata.fromCache), err); },
+        set(date, rec) { return setDoc(doc(fs, 'records', date), rec); },
+        del(date) { return deleteDoc(doc(fs, 'records', date)); },
+        watchGoal(cb, err) { return onSnapshot(doc(fs, 'settings', 'goal'), s => cb(s.exists() ? s.data() : null), err); },
+        setGoal(g) { return setDoc(doc(fs, 'settings', 'goal'), g); }
+    };
+    window.dispatchEvent(new Event('fb-ready'));
+} catch (e) {
+    window.__fbFailed = true;
+    window.dispatchEvent(new Event('fb-failed'));
+}
+</script>
+</body>
+</html>
